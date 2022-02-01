@@ -20,7 +20,6 @@ class PomodoroState extends State<Pomodoro> {
   final _addNewTimerController = TextEditingController();
   CountdownTimer? timer;
 
-
   String? _error;
 
   String? _errorInputText() => _error;
@@ -113,7 +112,7 @@ class PomodoroState extends State<Pomodoro> {
           height: 60,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: Colors.black12,
+            color: (item.isFinished) ? Colors.deepOrangeAccent : Colors.black12,
           ),
           // color: Colors.amberAccent,
           child: Row(
@@ -136,38 +135,7 @@ class PomodoroState extends State<Pomodoro> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  if(!item.isStarted && !item.isFinished){
-                    timer = CountdownTimer(
-                      Duration(milliseconds: item.currentMsState.toInt()),
-                      const Duration(milliseconds: 100),
-                    );
-
-                    item.isStarted = timer?.isRunning ?? false;
-                    print(item.isStarted);
-                    var sub = timer?.listen(null);
-                    sub?.onData((duration) {
-                      setState(() {
-                        item.currentMsState -= duration.increment.inMilliseconds;
-                        // print(duration.increment.inMilliseconds);
-                      });
-                    });
-                    sub?.onDone(() {
-                      item.isStarted = false;
-                      if(item.currentMsState <= 0){
-                        item.isFinished = true;
-                        item.currentMsState = item.futureMsState;
-                      }
-                      // item.isFinished = true;
-                      // timer = null;
-                      print(item.isFinished);
-                    });
-                  } else if(item.isStarted && !item.isFinished){
-                      timer?.cancel();
-                      timer = null;
-                      setState(() {
-                        item.isStarted = false;
-                      });
-                  }
+                  countDownTimer(item);
                 },
                 child: Text(item.isStarted ? 'Stop' : 'Start'),
               ),
@@ -176,6 +144,10 @@ class PomodoroState extends State<Pomodoro> {
                 color: Theme.of(context).primaryColor,
                 onPressed: () {
                   setState(() {
+                    if(item.isStarted){
+                      timer?.cancel();
+                      timer = null;
+                    }
                     list.remove(item);
                   });
                 },
@@ -184,4 +156,37 @@ class PomodoroState extends State<Pomodoro> {
           ),
         ),
       );
+
+  void countDownTimer(PomodoroItem item) {
+    if (!item.isStarted) {
+      item.isFinished = false;
+      timer?.cancel();
+      timer = CountdownTimer(
+        Duration(milliseconds: item.currentMsState.toInt()),
+        const Duration(milliseconds: 100),
+      );
+
+      item.isStarted = timer?.isRunning ?? false;
+      var sub = timer?.listen(null);
+      sub?.onData((duration) {
+        setState(() {
+          item.currentMsState -= duration.increment.inMilliseconds;
+        });
+      });
+      sub?.onDone(() {
+        item.isStarted = false;
+        if (item.currentMsState <= 0) {
+          item.isFinished = true;
+          item.currentMsState = item.futureMsState;
+        }
+        timer = null;
+      });
+    } else if (item.isStarted && !item.isFinished) {
+      timer?.cancel();
+      timer = null;
+      setState(() {
+        item.isStarted = false;
+      });
+    }
+  }
 }
