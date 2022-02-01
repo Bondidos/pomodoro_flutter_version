@@ -14,7 +14,23 @@ class Pomodoro extends StatefulWidget {
   State<StatefulWidget> createState() => PomodoroState();
 }
 
-class PomodoroState extends State<Pomodoro> {
+class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
+
+  late final AnimationController _controller = AnimationController(
+    duration: const Duration(seconds: 1),
+    vsync: this,
+  )..repeat(reverse: true);
+  
+  late final Animation<double> _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeIn,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+  }
+
   List<PomodoroItem> list = [];
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final _addNewTimerController = TextEditingController();
@@ -106,6 +122,17 @@ class PomodoroState extends State<Pomodoro> {
     });
   }
 
+  Widget fadingDot(BuildContext context) {
+    return  FadeTransition(
+        opacity: _animation,
+        child: CustomPaint(
+          foregroundPainter: DotPainter(context: context),
+        ),
+      );
+
+
+  }
+
   Widget item(BuildContext context, PomodoroItem item) => Padding(
         padding: const EdgeInsets.all(4.0),
         child: Container(
@@ -119,9 +146,17 @@ class PomodoroState extends State<Pomodoro> {
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              CustomPaint(
-                foregroundPainter: DotPainter(context: context),
+              Container(
+                child: item.isStarted ? fadingDot(context) : null,
               ),
+             /* Container(
+                child: FadeTransition(
+                  opacity: _animation,
+                  child: CustomPaint(
+                    foregroundPainter: DotPainter(context: context),
+                  ),
+                ),
+              ),*/
               Text(
                 displayTime(item.currentMsState),
                 style: const TextStyle(fontSize: 20), //TODO AWESOME STYLE
