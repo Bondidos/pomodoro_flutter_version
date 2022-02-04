@@ -1,5 +1,7 @@
+import 'dart:isolate';
+
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:quiver/async.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:pomodoro_flutter_version/util/util.dart';
 
@@ -14,7 +16,108 @@ class Pomodoro extends StatefulWidget {
   State<StatefulWidget> createState() => PomodoroState();
 }
 
+void startCallback() {
+  // The setTaskHandler function must be called to handle the task in the background.
+   FlutterForegroundTask.setTaskHandler(FirstTaskHandler());
+  print('callback');
+}
+
+
+
+
+
+
+class FirstTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
+    // You can use the getData function to get the data you saved.
+    final customData = await FlutterForegroundTask.getData<String>(key: 'customData');
+    print('customData: $customData');
+  }
+
+  @override
+  Future<void> onEvent(DateTime timestamp, SendPort? sendPort) async {
+    // Send data to the main isolate.
+    sendPort?.send(timestamp);
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp) async {
+    // You can use the clearAllData function to clear all the stored data.
+    await FlutterForegroundTask.clearAllData();
+  }
+
+  @override
+  void onButtonPressed(String id) {
+    // Called when the notification button on the Android platform is pressed.
+    print('onButtonPressed >> $id');
+  }
+}
+
+
+//todo https://pub.dev/documentation/flutter_foreground_task/latest/
+
+
+
+
+
+
 class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
+
+  ReceivePort? _receivePort;
+  Future<bool> _startForegroundTask() async {
+    // You can save data using the saveData function.
+    await FlutterForegroundTask.saveData(key: 'customData', value: 'hello');
+
+    ReceivePort? receivePort;
+    if (await FlutterForegroundTask.isRunningService) {
+      receivePort = await FlutterForegroundTask.restartService();
+    } else {
+      receivePort = await FlutterForegroundTask.startService(
+        notificationTitle: 'Foreground Service is running',
+        notificationText: 'Tap to return to the app',
+        callback: startCallback,
+      );
+    }
+
+    if (receivePort != null) {
+      _receivePort = receivePort;
+      _receivePort?.listen((message) {
+        if (message is DateTime) {
+          print('receive timestamp: $message');
+        }
+      });
+
+      return true;
+    }
+
+    return false;
+  }
+
+  @override
+  void dispose() {
+    _receivePort?.close();
+    _controller.dispose();
+
+    super.dispose();
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   late final AnimationController _controller = AnimationController(
     duration: const Duration(seconds: 1),
@@ -25,11 +128,12 @@ class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
       parent: _controller,
       curve: Curves.easeIn,
   );
-
+/*
   @override
   void dispose() {
+    super.dispose();
     _controller.dispose();
-  }
+  }*/
 
   List<PomodoroItem> list = [];
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -40,73 +144,103 @@ class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
 
   String? _errorInputText() => _error;
 
+  /*String timeService(){
+    return displayTime(timer?.remaining.inMilliseconds.toDouble() ?? 0);
+  }*/
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pomodoro'),
+    return WillStartForegroundTask(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'Pomodoro_channel',
+        channelName: 'Pomodoro Notification',
+        channelDescription: 'Shows Pomodoro\'s time count.',
+        channelImportance: NotificationChannelImportance.LOW,
+        priority: NotificationPriority.LOW,
+        iconData: const NotificationIconData(
+          resType: ResourceType.drawable,
+          resPrefix: ResourcePrefix.ic,
+          name: 'timer',
+        ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 9,
-            child: ListView.builder(
-                itemCount: list.length,
-                itemBuilder: (context, index) {
-                  return item(
-                    context,
-                    list[index],
-                  );
-                }),
-          ),
-          Expanded(
-            flex: 1,
-            child: Form(
-              key: _formKey,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: SizedBox(
-                      width: 250,
-                      child: TextFormField(
-                        controller: _addNewTimerController,
-                        keyboardType: TextInputType.number,
-                        maxLength: 5,
-                        decoration: InputDecoration(
-                          errorText: _errorInputText(),
-                          hintText: 'Inter value, seconds',
+      printDevLog: true,
+      foregroundTaskOptions: const ForegroundTaskOptions(
+        interval: 5000,
+        allowWifiLock: false,
+        autoRunOnBoot: false,
+      ),
+      notificationText: 'timeService()',
+      onWillStart: () async {
+        return timer?.isRunning ?? false;
+      },
+      callback: startCallback,
+      notificationTitle: 'Pomodoro',
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Pomodoro'),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              flex: 9,
+              child: ListView.builder(
+                  itemCount: list.length,
+                  itemBuilder: (context, index) {
+                    return item(
+                      context,
+                      list[index],
+                    );
+                  }),
+            ),
+            Expanded(
+              flex: 1,
+              child: Form(
+                key: _formKey,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      child: SizedBox(
+                        width: 250,
+                        child: TextFormField(
+                          controller: _addNewTimerController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 5,
+                          decoration: InputDecoration(
+                            errorText: _errorInputText(),
+                            hintText: 'Inter value, seconds',
+                          ),
+                          validator: (String? value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter some time';
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (String? value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter some time';
-                          }
-                          return null;
-                        },
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          _error = _formKey.currentState!.validate() != null
-                              ? _formKey.currentState!.validate().toString()
-                              : null;
-                          addNewTimer();
-                        }
-                      },
-                      child: const Text('AddTimer'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      child: ElevatedButton(
+                        onPressed: () {
+                          if (_formKey.currentState!.validate()) {
+                            _error = _formKey.currentState!.validate() != null
+                                ? _formKey.currentState!.validate().toString()
+                                : null;
+                            addNewTimer();
+                          }
+                        },
+                        child: const Text('AddTimer'),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -129,8 +263,6 @@ class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
           foregroundPainter: DotPainter(context: context),
         ),
       );
-
-
   }
 
   Widget item(BuildContext context, PomodoroItem item) => Padding(
@@ -149,14 +281,6 @@ class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
               Container(
                 child: item.isStarted ? fadingDot(context) : null,
               ),
-             /* Container(
-                child: FadeTransition(
-                  opacity: _animation,
-                  child: CustomPaint(
-                    foregroundPainter: DotPainter(context: context),
-                  ),
-                ),
-              ),*/
               Text(
                 displayTime(item.currentMsState),
                 style: const TextStyle(fontSize: 20), //TODO AWESOME STYLE
