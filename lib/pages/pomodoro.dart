@@ -7,6 +7,7 @@ import 'package:pomodoro_flutter_version/util/util.dart';
 
 import '../painted_widgets/drawDot.dart';
 import '../painted_widgets/drawFillingCircle.dart';
+import '../service_task.dart';
 import '../timer_model/model.dart';
 
 class Pomodoro extends StatefulWidget {
@@ -22,39 +23,6 @@ void startCallback() {
   print('callback');
 }
 
-
-
-
-
-
-class FirstTaskHandler extends TaskHandler {
-  @override
-  Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
-    // You can use the getData function to get the data you saved.
-    final customData = await FlutterForegroundTask.getData<String>(key: 'customData');
-    print('customData: $customData');
-  }
-
-  @override
-  Future<void> onEvent(DateTime timestamp, SendPort? sendPort) async {
-    // Send data to the main isolate.
-    sendPort?.send(timestamp);
-  }
-
-  @override
-  Future<void> onDestroy(DateTime timestamp) async {
-    // You can use the clearAllData function to clear all the stored data.
-    await FlutterForegroundTask.clearAllData();
-  }
-
-  @override
-  void onButtonPressed(String id) {
-    // Called when the notification button on the Android platform is pressed.
-    print('onButtonPressed >> $id');
-  }
-}
-
-
 //todo https://pub.dev/documentation/flutter_foreground_task/latest/
 
 
@@ -64,60 +32,11 @@ class FirstTaskHandler extends TaskHandler {
 
 class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
 
-  ReceivePort? _receivePort;
-  Future<bool> _startForegroundTask() async {
-    // You can save data using the saveData function.
-    await FlutterForegroundTask.saveData(key: 'customData', value: 'hello');
-
-    ReceivePort? receivePort;
-    if (await FlutterForegroundTask.isRunningService) {
-      receivePort = await FlutterForegroundTask.restartService();
-    } else {
-      receivePort = await FlutterForegroundTask.startService(
-        notificationTitle: 'Foreground Service is running',
-        notificationText: 'Tap to return to the app',
-        callback: startCallback,
-      );
-    }
-
-    if (receivePort != null) {
-      _receivePort = receivePort;
-      _receivePort?.listen((message) {
-        if (message is DateTime) {
-          print('receive timestamp: $message');
-        }
-      });
-
-      return true;
-    }
-
-    return false;
-  }
-
   @override
   void dispose() {
-    _receivePort?.close();
     _controller.dispose();
-
     super.dispose();
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   late final AnimationController _controller = AnimationController(
     duration: const Duration(seconds: 1),
@@ -144,9 +63,9 @@ class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
 
   String? _errorInputText() => _error;
 
-  /*String timeService(){
+  String timeService(){
     return displayTime(timer?.remaining.inMilliseconds.toDouble() ?? 0);
-  }*/
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,9 +88,19 @@ class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
         allowWifiLock: false,
         autoRunOnBoot: false,
       ),
-      notificationText: 'timeService()',
+      notificationText: timeService(),
       onWillStart: () async {
-        return timer?.isRunning ?? false;
+        //this method pass into the service timer value
+        // todo write here  logic save timer state and cancel
+        if(timer != null && (timer?.isRunning ?? false) ){
+          await FlutterForegroundTask.saveData(key: 'currentTimer', value: timer?.remaining.inMilliseconds ?? 0);
+          timer?.cancel();
+          timer = null;
+          return true;
+        } else{
+          FlutterForegroundTask.stopService();
+        }
+        return false;
       },
       callback: startCallback,
       notificationTitle: 'Pomodoro',
@@ -203,7 +132,7 @@ class PomodoroState extends State<Pomodoro> with TickerProviderStateMixin{
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 15),
                       child: SizedBox(
-                        width: 250,
+                        width: 200,
                         child: TextFormField(
                           controller: _addNewTimerController,
                           keyboardType: TextInputType.number,
